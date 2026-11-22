@@ -92,3 +92,51 @@
 (defun %css0-pending (what)
   "Contract stub. Every call site is replaced by the H4h-0b-0 implementation."
   (error 'css0-pending :what what))
+
+;;; Validation driver (internal). A validator refuses its input by calling
+;;; %REFUSE, which signals %CSS-INVALID naming the public condition class.
+;;; %VALIDATE turns that into the public CSS-SYNTAX-ERROR subclass, signalled
+;;; directly inside RESTART-CASE so USE-VALUE and SKIP-INVALID are associated
+;;; with it. %CSS-INVALID never escapes css-protocol.
+
+(define-condition %css-invalid (error)
+  ((class :initarg :class :reader %css-invalid-class)
+   (message :initarg :message :reader %css-invalid-message :initform nil))
+  (:report (lambda (c s)
+             (format s "Internal css-protocol refusal (~S)~@[: ~A~]"
+                     (%css-invalid-class c) (%css-invalid-message c))))
+  (:documentation "Internal: a validator refused its input. Caught by %VALIDATE."))
+
+(defun %refuse (class message)
+  "Refuse the input being validated: CLASS is the public condition to signal."
+  (error '%css-invalid :class class :message message))
+
+(defun %require-type (datum type)
+  "DATUM when it is of TYPE, else a plain CL TYPE-ERROR (no STORE-VALUE)."
+  (unless (typep datum type)
+    (error 'type-error :datum datum :expected-type type))
+  datum)
+
+(defun %read-replacement ()
+  (format *query-io* "~&Replacement text: ")
+  (force-output *query-io*)
+  (list (read-line *query-io*)))
+
+(defun %validate (input validator)
+  "Call VALIDATOR on INPUT until it accepts. On a refusal, signal the public
+condition with :INPUT INPUT inside USE-VALUE (the replacement is validated
+again) and SKIP-INVALID. Returns (values RESULT T), or (values NIL NIL) after
+SKIP-INVALID."
+  (loop
+    (let ((refusal (handler-case (return (values (funcall validator input) t))
+                     (%css-invalid (refusal) refusal))))
+      (restart-case (error (%css-invalid-class refusal)
+                           :input input
+                           :message (%css-invalid-message refusal))
+        (use-value (value)
+          :report "Use another value (it is validated again)."
+          :interactive %read-replacement
+          (setf input value))
+        (skip-invalid ()
+          :report "Skip this item (the constructor returns NIL)."
+          (return (values nil nil)))))))

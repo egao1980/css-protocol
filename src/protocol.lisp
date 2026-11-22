@@ -29,6 +29,26 @@
   (declare (ignore backend))
   source)
 
-(defmethod compile-stylesheet (source &key backend &allow-other-keys)
-  (declare (ignore source backend))
-  (%css0-pending 'compile-stylesheet))
+(defun %read-object (prompt)
+  (format *query-io* "~&~A (evaluated): " prompt)
+  (force-output *query-io*)
+  (list (eval (read *query-io*))))
+
+(defmethod compile-stylesheet (source &rest keys &key backend &allow-other-keys)
+  (let ((options (loop for (key value) on keys by #'cddr
+                       unless (eq key :backend) nconc (list key value))))
+    (block compile
+      (loop
+        (let ((chosen (or backend *css-backend*)))
+          (when chosen
+            (return-from compile
+              (apply #'backend-compile-stylesheet chosen source options))))
+        (restart-case (error 'css-no-backend :source source)
+          (use-value (stylesheet)
+            :report "Return a stylesheet instead of compiling."
+            :interactive (lambda () (%read-object "Stylesheet"))
+            (return-from compile (%require-type stylesheet 'stylesheet)))
+          (use-backend (new-backend)
+            :report "Retry the compile with another backend."
+            :interactive (lambda () (%read-object "Backend"))
+            (setf backend new-backend)))))))
