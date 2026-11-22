@@ -97,14 +97,13 @@
 
 (deftest skip-invalid-restart
   (testing "constructors return NIL"
-    (with-handler (css-error #'skip-invalid)
-      (ok (null (decl "color" "red;")))
-      (ok (null (decl "col or" "red")))
-      (ok (null (r "a {" (decl "color" "red"))))
-      (ok (null (parse-selector-list "a {")))
-      (ok (null (make-media-rule "a{" nil)))
-      (ok (null (make-keyframe "nope" nil)))
-      (ok (null (css-ident "")))))
+    (ok (null (with-handler (css-error #'skip-invalid) (decl "color" "red;"))))
+    (ok (null (with-handler (css-error #'skip-invalid) (decl "col or" "red"))))
+    (ok (null (with-handler (css-error #'skip-invalid) (r "a {" (decl "color" "red")))))
+    (ok (null (with-handler (css-error #'skip-invalid) (parse-selector-list "a {"))))
+    (ok (null (with-handler (css-error #'skip-invalid) (make-media-rule "a{" nil))))
+    (ok (null (with-handler (css-error #'skip-invalid) (make-keyframe "nope" nil))))
+    (ok (null (with-handler (css-error #'skip-invalid) (css-ident "")))))
   (testing "containers drop skipped children"
     (let ((x (with-handler (css-error #'skip-invalid)
                (sheet (r "a {" (decl "color" "red"))
